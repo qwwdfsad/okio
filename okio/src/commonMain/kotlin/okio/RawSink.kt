@@ -51,6 +51,23 @@ expect interface RawSink : Closeable {
   @Throws(IOException::class)
   fun flush()
 
+
+  /**
+   * Pushes all buffered bytes to their destination in an asynchronous manner,
+   * suspending the caller unless all data is written down.
+   *
+   * ### List of open questions
+   *
+   * * Should it be aliased to [flush] by default?
+   *   Basicslly same issue as for source: throwing by default may break composability,
+   *       flush by default will break composability as well, forcing users to implemnt it may break convinience
+   * * Should we have an attribute for sink that distringuishes whether it supports suspendability?
+   *   My vote is for 'no' -- suspendability is a secondary API extension that is supposed to be used by advance users,
+   *   they will know themselves. Everyone else is not expected to use it anyway, ideally we would like to even hide it
+   *   under different name, but alas it breaks composability as well.
+   */
+  suspend fun flushSuspend() /* = flush() */
+
   /**
    * Asynchronously cancel this source. Any [write] or [flush] in flight should immediately fail
    * with an [IOException], and any future writes and flushes should also immediately fail with an
@@ -66,4 +83,5 @@ expect interface RawSink : Closeable {
    */
   @Throws(IOException::class)
   override fun close()
+
 }

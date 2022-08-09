@@ -54,6 +54,9 @@ interface RawSource : Closeable {
   /**
    * Removes at least 1, and up to `byteCount` bytes from this and appends them to `sink`. Returns
    * the number of bytes read, or -1 if this source is exhausted.
+   *
+   * For purely asynchronous sources, this method is allowed to throw [IllegalStateException], if
+   * it was not preceded by the corresponding [awaitAvailable] call.
    */
   @Throws(IOException::class)
   fun read(sink: Buffer, byteCount: Long): Long
@@ -72,4 +75,30 @@ interface RawSource : Closeable {
    */
   @Throws(IOException::class)
   override fun close()
+
+  /**
+   * Awaits the underlying source to fill-in the data and returns the number of bytes
+   * available, so the next `read(..., result)` will be served immediately.
+   * Returns `-1` if the underlying source is closed or exhausted.
+   *
+   * This method is optional and is allowed to return `-1` unconditionally for definitely
+   * blocking sources.
+   *
+   * ### List of open questions
+   *
+   * * Should we distinguish "exhausted/closed" from "not supported" (`-2`)?
+   *    Maybe it should even throw as it doesn't make any sense to call it on blocking sources at all.
+   * * Should we make this method optional?
+   *     * Pros -- implementing RawSource is pretty straightforward
+   *     * Cons -- easy to forget to delegate and then composability is broken
+   *     * My vote -- make it non-optional (it is optional now to reduce the patch size)
+   * * This method feels slightly off:
+   *     * We have `request()` and `require()` on `Source`
+   *     * And this single and alone `await` here
+   *     * It is perfectly understandable from an implementation standpoint,
+   *       but may be a bit weird for users.
+   */
+  suspend fun awaitAvailable(atLeastBytes: Long = -1L): Long {
+    return -1
+  }
 }

@@ -102,12 +102,14 @@ kotlin {
 
     val jvmMain by getting {
       dependencies {
+        implementation("org.apache.httpcomponents:httpcore-nio:4.4.15")
         compileOnly(deps.animalSniffer.annotations)
       }
     }
     val jvmTest by getting {
       kotlin.srcDir("src/jvmTest/hashFunctions")
       dependencies {
+        implementation("org.jetbrains.kotlinx:kotlinx-coroutines-core:1.6.4")
         implementation(deps.test.junit)
         implementation(deps.test.assertj)
       }
