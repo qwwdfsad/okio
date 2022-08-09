@@ -3,10 +3,12 @@ package okio.aio
 import java.nio.*
 import okio.*
 import java.nio.channels.*
+import java.nio.channels.CompletionHandler
 import java.nio.file.*
 import java.util.concurrent.atomic.AtomicReference
 import kotlin.coroutines.*
 import kotlin.math.*
+import kotlinx.coroutines.*
 import okio.Buffer
 
 /**
@@ -49,7 +51,7 @@ class AsynchronousFileSink(
             }
 
             override fun failed(exc: Throwable?, attachment: AsynchronousFileSink?) {
-              // TODO
+              println("Failed")  // TODO
             }
           })
       }
@@ -57,7 +59,9 @@ class AsynchronousFileSink(
   }
 
   override fun flush() {
-    // TODO
+    runBlocking {
+      flushSuspend()
+    }
   }
 
   override fun cancel() {
@@ -65,7 +69,9 @@ class AsynchronousFileSink(
   }
 
   override fun close() {
-    // TODO proper implementation should flush properly first, but I'm too lazy to impl it as well
+    runBlocking {
+      flushSuspend()
+    }
     channel.close()
   }
 }

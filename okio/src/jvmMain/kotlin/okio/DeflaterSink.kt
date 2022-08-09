@@ -112,6 +112,11 @@ internal constructor(private val sink: Sink, private val deflater: Deflater) : R
     sink.flush()
   }
 
+  override suspend fun flushSuspend() {
+    deflate(true)
+    sink.flushSuspend()
+  }
+
   internal fun finishDeflate() {
     deflater.finish()
     deflate(false)

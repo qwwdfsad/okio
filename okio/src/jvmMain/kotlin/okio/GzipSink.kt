@@ -82,6 +82,8 @@ class GzipSink(sink: RawSink) : RawSink {
   @Throws(IOException::class)
   override fun flush() = deflaterSink.flush()
 
+  override suspend fun flushSuspend() = deflaterSink.flushSuspend()
+
   override fun cancel() {
     sink.cancel()
   }

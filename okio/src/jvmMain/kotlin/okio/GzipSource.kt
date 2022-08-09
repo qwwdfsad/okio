@@ -93,6 +93,10 @@ class GzipSource(source: RawSource) : RawSource {
     return -1
   }
 
+  override suspend fun awaitAvailable(atLeastBytes: Long): Long {
+      return source.awaitAvailable()
+  }
+
   @Throws(IOException::class)
   private fun consumeHeader() {
     // Read the 10-byte header. We peek at the flags byte first so we know if we

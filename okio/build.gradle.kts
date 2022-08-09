@@ -102,6 +102,7 @@ kotlin {
 
     val jvmMain by getting {
       dependencies {
+        implementation("org.jetbrains.kotlinx:kotlinx-coroutines-core:1.6.4")
         implementation("org.apache.httpcomponents:httpcore-nio:4.4.15")
         compileOnly(deps.animalSniffer.annotations)
       }

@@ -31,10 +31,42 @@ class AsynchronousFileSource(
       return -1
     }
 
-    check(!temporaryBuffer.exhausted()) { "All read() calls should be preceded by 'awaitAvailable()'" }
+    /*
+     * Here we do real blocking call in order to compose this source with GzipSource.
+     * We have a composability problem for the following API:
+     * ```
+     * val source = asyncSource.gzip().anyOtherAdapter()
+     *
+     * source.awaitAvailable(1) // Or 2, 3, 10k or w/e
+     * source.readUtf8String()
+     * ```
+     *
+     * `gzip` may require _an arbitrary_ number of bytes being read in order to give 1 byte in return and
+     * we have no control over such implementations. So 'async' primitives wuth non-trivial dependency here
+     * either should throw (e.g. Ktor may want to do that, or to provide adapters) or do block, which is also acceptable.
+     *
+     * It is probably okay for low-level IO where a proper implementation can await enough bytes before proceeding further,
+     * but it still can be considered a mine field for end users and requires an effort around that.
+     */
+    if (temporaryBuffer.exhausted()) {
+      // Here it is possible to read directly to 'sink' tho
+      readBlocking()
+    }
+
+//    check(!temporaryBuffer.exhausted()) { "All read() calls should be preceded by 'awaitAvailable()'" }
     val totalRead = temporaryBuffer.read(sink, byteCount)
-    check(totalRead != -1L) { "Assertiom failure, read: $totalRead" }
+    check(totalRead != -1L) { "Assertion failure, read: $totalRead" }
     return totalRead
+  }
+
+  private fun readBlocking() {
+    temporaryBuffer.readAndWriteUnsafe().use {
+      it.resizeBuffer(128)
+      val future = channel.read(ByteBuffer.wrap(it.data!!, it.start, it.end - it.start), currentPosition)
+      val read = future.get()
+      it.resizeBuffer(read.toLong())
+      currentPosition += read
+    }
   }
 
   override fun cancel() {
@@ -82,7 +114,8 @@ class AsynchronousFileSource(
             val previousPosition = attachment.currentPosition
             attachment.currentPosition += result
             attachment.cursor!!.resizeBuffer(result.toLong())
-            cursor.close()
+            attachment.cursor!!.close()
+
             attachment.continuation!!.resumeWith(Result.success(result.toLong() - previousPosition))
           }
 
