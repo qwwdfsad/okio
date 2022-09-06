@@ -15,6 +15,8 @@
  */
 package okio
 
+import okio.aio.*
+
 /**
  * Receives a stream of bytes. Use this interface to write data wherever it's needed: to the
  * network, storage, or a buffer in memory. Sinks may be layered to transform received data, such as
@@ -55,18 +57,15 @@ expect interface RawSink : Closeable {
   /**
    * Pushes all buffered bytes to their destination in an asynchronous manner,
    * suspending the caller unless all data is written down.
-   *
-   * ### List of open questions
-   *
-   * * Should it be aliased to [flush] by default?
-   *   Basicslly same issue as for source: throwing by default may break composability,
-   *       flush by default will break composability as well, forcing users to implemnt it may break convinience
-   * * Should we have an attribute for sink that distringuishes whether it supports suspendability?
-   *   My vote is for 'no' -- suspendability is a secondary API extension that is supposed to be used by advance users,
-   *   they will know themselves. Everyone else is not expected to use it anyway, ideally we would like to even hide it
-   *   under different name, but alas it breaks composability as well.
    */
-  suspend fun flushSuspend() /* = flush() */
+  @ExperimentalAsynchronousIo
+  suspend fun flushSuspend()
+//  { TODO expected declaration can't have a body
+//    throw UnsupportedOperationException(
+//      "Asynchronous streams require support in each intermediate 'Sink' implementation," +
+//        " currently unsupported in '${this::class.simpleName}'"
+//    )
+//  }
 
   /**
    * Asynchronously cancel this source. Any [write] or [flush] in flight should immediately fail

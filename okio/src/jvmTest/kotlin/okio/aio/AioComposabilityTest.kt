@@ -2,10 +2,9 @@ package okio.aio
 
 import java.nio.file.*
 import kotlin.io.path.*
+import kotlin.test.*
 import kotlinx.coroutines.*
 import okio.*
-import okio.FileSystem
-import okio.Path.Companion.toOkioPath
 import org.junit.After
 import org.junit.Test
 
@@ -37,7 +36,7 @@ class AioComposabilityTest {
   }
 
   @Test
-  fun doTest() = runBlocking<Unit> {
+  fun testDoubleComposition() = runBlocking<Unit> {
     val sink = AsynchronousFileSink(path).gzip().buffer()
     sink.writeUtf8(expectedContent)
     sink.flushSuspend()
@@ -45,12 +44,46 @@ class AioComposabilityTest {
 
     println("String size: ${expectedContent.length}, written down: ${path.fileSize()} bytes")
 
-    val source = AsynchronousFileSource(path).gzip().buffer()
+    val asyncSource = AsynchronousFileSource(path).asyncGzip().buffer()
+    val blockingSource = Files.readAllBytes(path).inputStream().source().gzip().buffer()
 
-    source.awaitAvailable()
-    val result = source.readUtf8()
+    while (!blockingSource.exhausted()) {
+      val expected = blockingSource.readUtf8Line()
+      asyncSource.awaitAvailable(AwaitPredicate.Utf8String)
+      val actual = asyncSource.readUtf8Line()
+      assertEquals(expected, actual)
+    }
+    assertTrue { asyncSource.exhausted() }
+  }
+
+  @Test
+  fun testStringComposition() = runBlocking<Unit> {
+    val sink = AsynchronousFileSink(path).buffer()
+    val longString = "foo".repeat(128)
+    val longString2 = "bar".repeat(128)
+    sink.writeUtf8(longString)
+    sink.writeUtf8("\n")
+    sink.writeUtf8(longString2)
+    sink.writeUtf8("\n")
+    sink.flushSuspend()
+    sink.close()
+
+    println("Written down: ${path.fileSize()} bytes")
+
+    val source = AsynchronousFileSource(path).buffer()
+    var totalRead = 0L
+    val expected = buildList {
+      val read1 = source.awaitAvailable(AwaitPredicate.Utf8String)
+      totalRead += read1
+      assertEquals(512, read1)
+      add(source.readUtf8LineStrict())
+      val read2 = source.awaitAvailable(AwaitPredicate.Utf8String)
+      assertEquals(258, read2)
+      add(source.readUtf8LineStrict())
+      totalRead += read2
+    }
     source.close()
-
-    println("String size: ${result.length}")
+    assertEquals(listOf(longString, longString2), expected)
+    assertEquals(path.fileSize(), totalRead)
   }
 }

@@ -67,8 +67,8 @@ internal actual class RealSource actual constructor(
   override fun require(byteCount: Long): Unit = commonRequire(byteCount)
   override fun request(byteCount: Long): Boolean = commonRequest(byteCount)
 
-  override suspend fun awaitAvailable(atLeastBytes: Long): Long {
-    return source.awaitAvailable(atLeastBytes)
+  override suspend fun awaitAvailable(predicate: AwaitPredicate): Long {
+    return source.awaitAvailable(predicate)
   }
 
   override fun readByte(): Byte = commonReadByte()
