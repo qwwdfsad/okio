@@ -1,34 +1,11 @@
-/*
- * Copyright (C) 2014 Square, Inc.
- *
- * Licensed under the Apache License, Version 2.0 (the "License");
- * you may not use this file except in compliance with the License.
- * You may obtain a copy of the License at
- *
- *      http://www.apache.org/licenses/LICENSE-2.0
- *
- * Unless required by applicable law or agreed to in writing, software
- * distributed under the License is distributed on an "AS IS" BASIS,
- * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
- * See the License for the specific language governing permissions and
- * limitations under the License.
- */
-
-@file:JvmName("-GzipSourceExtensions")
-@file:Suppress("NOTHING_TO_INLINE") // Aliases to public API.
-
-package okio
+package okio.aio
 
 import java.io.EOFException
 import java.io.IOException
-import java.util.zip.CRC32
-import java.util.zip.Inflater
+import java.util.zip.*
+import okio.*
 
-/**
- * A source that uses [GZIP](http://www.ietf.org/rfc/rfc1952.txt) to
- * decompress data read from another source.
- */
-class GzipSource(source: RawSource) : RawSource {
+class AsyncGzipSource(source: RawSource) : RawSource {
 
   /** The current section. Always progresses forward. */
   private var section = SECTION_HEADER
@@ -52,45 +29,44 @@ class GzipSource(source: RawSource) : RawSource {
   /** Checksum used to check both the GZIP header and decompressed body. */
   private val crc = CRC32()
 
+
   @Throws(IOException::class)
   override fun read(sink: Buffer, byteCount: Long): Long {
     require(byteCount >= 0L) { "byteCount < 0: $byteCount" }
     if (byteCount == 0L) return 0L
+    return inflatedBuffer.read(sink, byteCount)
+  }
 
-    // If we haven't consumed the header, we must consume it before anything else.
+  private val inflatedBuffer = Buffer()
+
+  @ExperimentalAsynchronousIo
+  override suspend fun awaitAvailable(predicate: AwaitPredicate): Long {
     if (section == SECTION_HEADER) {
+      source.awaitAvailable(AwaitPredicate.atLeastNBytes(15))
       consumeHeader()
       section = SECTION_BODY
-    }
-
-    // Attempt to read at least a byte of the body. If we do, we're done.
-    if (section == SECTION_BODY) {
-      val offset = sink.size
-      val result = inflaterSource.read(sink, byteCount)
-      if (result != -1L) {
-        updateCrc(sink, offset, result)
-        return result
-      }
-      section = SECTION_TRAILER
-    }
-
-    // The body is exhausted; time to read the trailer. We always consume the
-    // trailer before returning a -1 exhausted result; that way if you read to
-    // the end of a GzipSource you guarantee that the CRC has been checked.
-    if (section == SECTION_TRAILER) {
+    } else if (section == SECTION_TRAILER) {
+      source.awaitAvailable(AwaitPredicate.atLeastNBytes(8))
       consumeTrailer()
       section = SECTION_DONE
-
-      // Gzip streams self-terminate: they return -1 before their underlying
-      // source returns -1. Here we attempt to force the underlying stream to
-      // return -1 which may trigger it to release its resources. If it doesn't
-      // return -1, then our Gzip data finished prematurely!
-      if (!source.exhausted()) {
-        throw IOException("gzip finished without exhausting source")
-      }
+      return -1L
     }
 
-    return -1
+    var offset = inflatedBuffer.size
+    var bytesRead = 0L
+    while (!predicate.apply(inflatedBuffer, offset)) {
+      // Await anything
+      source.awaitAvailable()
+      val result = inflaterSource.read(inflatedBuffer, Segment.SIZE.toLong())
+      if (result != -1L) {
+        bytesRead += result
+        offset += result
+        updateCrc(inflatedBuffer, offset, result)
+      } else {
+        return bytesRead
+      }
+    }
+    return bytesRead.positiveOrMinisOne()
   }
 
   @Throws(IOException::class)
@@ -201,21 +177,4 @@ class GzipSource(source: RawSource) : RawSource {
   }
 }
 
-internal inline fun Int.getBit(bit: Int) = this shr bit and 1 == 1
-
-internal const val FHCRC = 1
-internal const val FEXTRA = 2
-internal const val FNAME = 3
-internal const val FCOMMENT = 4
-
-internal const val SECTION_HEADER: Byte = 0
-internal const val SECTION_BODY: Byte = 1
-internal const val SECTION_TRAILER: Byte = 2
-internal const val SECTION_DONE: Byte = 3
-
-/**
- * Returns a [GzipSource] that gzip-decompresses this [RawSource] while reading.
- *
- * @see GzipSource
- */
-inline fun RawSource.gzip() = GzipSource(this)
+inline fun RawSource.asyncGzip() = AsyncGzipSource(this)

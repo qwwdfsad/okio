@@ -15,6 +15,8 @@
  */
 package okio
 
+import okio.aio.*
+
 /**
  * Receives a stream of bytes. Use this interface to write data wherever it's needed: to the
  * network, storage, or a buffer in memory. Sinks may be layered to transform received data, such as
@@ -51,6 +53,20 @@ expect interface RawSink : Closeable {
   @Throws(IOException::class)
   fun flush()
 
+
+  /**
+   * Pushes all buffered bytes to their destination in an asynchronous manner,
+   * suspending the caller unless all data is written down.
+   */
+  @ExperimentalAsynchronousIo
+  suspend fun flushSuspend()
+//  { TODO expected declaration can't have a body
+//    throw UnsupportedOperationException(
+//      "Asynchronous streams require support in each intermediate 'Sink' implementation," +
+//        " currently unsupported in '${this::class.simpleName}'"
+//    )
+//  }
+
   /**
    * Asynchronously cancel this source. Any [write] or [flush] in flight should immediately fail
    * with an [IOException], and any future writes and flushes should also immediately fail with an
@@ -66,4 +82,5 @@ expect interface RawSink : Closeable {
    */
   @Throws(IOException::class)
   override fun close()
+
 }

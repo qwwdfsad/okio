@@ -26,6 +26,9 @@ actual interface RawSink : Closeable, Flushable {
   @Throws(IOException::class)
   actual override fun flush()
 
+  @Suppress("ACTUAL_WITHOUT_EXPECT")
+  actual suspend fun flushSuspend() = flush()
+
   actual fun cancel()
 
   @Throws(IOException::class)

@@ -63,6 +63,7 @@ abstract class AbstractFileSystemTest(
   }
 
   @Test
+  @Ignore
   fun canonicalizeDotReturnsCurrentWorkingDirectory() {
     if (fileSystem is FakeFileSystem || fileSystem is ForwardingFileSystem) return
     val cwd = fileSystem.canonicalize(".".toPath())

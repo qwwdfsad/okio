@@ -132,6 +132,14 @@ internal actual class RealSink actual constructor(
 
   override fun flush() = commonFlush()
 
+  override suspend fun flushSuspend() {
+    check(!closed) { "closed" }
+    if (buffer.size > 0L) {
+      sink.write(buffer, buffer.size)
+    }
+    sink.flushSuspend()
+  }
+
   override fun isOpen() = !closed
 
 

@@ -15,6 +15,8 @@
  */
 package okio
 
+import okio.aio.*
+
 /**
  * Supplies a stream of bytes. Use this interface to read data from wherever it's located: from the
  * network, storage, or a buffer in memory. Sources may be layered to transform supplied data, such
@@ -54,6 +56,9 @@ interface RawSource : Closeable {
   /**
    * Removes at least 1, and up to `byteCount` bytes from this and appends them to `sink`. Returns
    * the number of bytes read, or -1 if this source is exhausted.
+   *
+   * For purely asynchronous sources, this method is allowed to throw [IllegalStateException], if
+   * it was not preceded by the corresponding [awaitAvailable] call.
    */
   @Throws(IOException::class)
   fun read(sink: Buffer, byteCount: Long): Long
@@ -72,4 +77,47 @@ interface RawSource : Closeable {
    */
   @Throws(IOException::class)
   override fun close()
+
+  /**
+   * Awaits the underlying source to fill-in the data that matches the given [predicate] and returns the number of bytes
+   * available, so the next `read(..., result)` will be served immediately.
+   * Returns `-1` if the underlying source is closed or exhausted.
+   *
+   * This method is allowed to read arbitrary more bytes than the given [predicate] mandates.
+   * Example of use:
+   * ```
+   * val mySource = networkStream.protocolDecoding().asyncGzip().buffer()
+   * mySource.awaitAvailable(AwaitPredicate.Utf8String) // Wait until full string is ready to be read
+   * val stringFromNetwork = mySource.readUtf8Strict() // <- guaranteed to succeed unless input was closed
+   * ```
+   *
+   * ### API implementation
+   *
+   * Asynchronous streams of data may require a specific handling, sometimes inexpressible
+   * in blockign IO terms without full-blown concurrency support.
+   * Default implementation of this methods throws `UnsupportedOperationException` by default
+   * and library authors should explicitly opt-in into the support of such API and conform accordingly.
+   */
+  @ExperimentalAsynchronousIo
+  suspend fun awaitAvailable(predicate: AwaitPredicate = AwaitPredicate.AnyBytes): Long {
+    throw UnsupportedOperationException(
+      "Asynchronous streams require support in each intermediate 'Source' implementation," +
+        " currently unsupported in '${this::class.simpleName}'"
+    )
+  }
+}
+
+public fun interface AwaitPredicate {
+  // TODO better name?
+  public fun apply(buffer: Buffer, fromIndex: Long): Boolean
+
+  public companion object {
+
+    public val AnyBytes: AwaitPredicate = AwaitPredicate { _, _ -> true }
+
+    public val Utf8String: AwaitPredicate =
+      AwaitPredicate { buffer, index -> buffer.indexOf('\n'.code.toByte(), index) != -1L }
+
+    public fun atLeastNBytes(numberOfBytes: Long) = AwaitPredicate { buffer, _ -> buffer.size >= numberOfBytes }
+  }
 }
